@@ -6,7 +6,7 @@
 	Converts a mail enabled security group or a distribution group to a shared mailbox in Office 365
 	.DESCRIPTION
 	Use this command to convert a security group or a distribution group into a shared mailbox.
-	The shared mailbox will have the same users and security groups as members and will be added to all of the groups that the original group was a member of.
+	The shared mailbox will have the same users and security groups as members and it will be added to all of the groups that the original group was a member of.
 	The Command also adds the original groups alias information into the new shared mailbox.
 	Non domain users and contacts will not be added to the shared mailbox as members nor will distribution groups.
 	.PARAMETER Groups
@@ -14,7 +14,7 @@
 	.PARAMETER Delegate
 	Should the users be delegated the right to send on behalf of the created shared mailbox
 	.PARAMETER AutoMap
-	Should the automapping function be enabled for the shared mailbox
+	Should the automapping function be enabled for the users in the shared mailbox
 	.PARAMETER Confirm
 	Should the script do a prompt before removing any groups
 	.EXAMPLE
