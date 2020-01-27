@@ -1,5 +1,6 @@
 ﻿#requires -version 5.0
 #requires -module AzureAD
+#requires -module RemoveDiacritics
 
 <#
 	.SYNOPSIS
@@ -20,35 +21,36 @@
 	.EXAMPLE
 	ConvertGroupToSharedMailbox "Example1","Example2" -Delegate:$true -AutoMap:$false -Confirm:$false
 #>
-
+import-module "$PSScriptRoot\RemoveDiacritics.psm1"
 function ConvertGroupToSharedMailbox ($Groups, [bool]$Delegate=$true, [bool]$AutoMap=$true, [bool]$Confirm=$true){
 	if (Get-Module -ListAvailable -Name 'AzureAD') {
 		Connect-AzureAD
 		$OfficeSession = StartSession
 		foreach ($Group in $Groups){
 			Write-Host "Starting conversion for group $Group" 
+			$Group = Get-DistributionGroup -Identity $Group | Where-object {$_.DisplayName -eq $Group} | Select-Object -Property "DisplayName" | %{$_.DisplayName}
 			Try 
 			{
-				$Mail = Get-DistributionGroup -Identity $Group -ErrorAction Stop | Select -Property "PrimarySmtpAddress" 
+				$Mail = Get-DistributionGroup -Identity $Group -ErrorAction Stop | Where-object {$_.DisplayName -eq $Group} | Select-Object -Property "PrimarySmtpAddress" 
 			}
 			Catch
 			{
 				Write-Host "Group $Group not found"
 				break
 			}
-			$Group = Get-DistributionGroup -Identity $Group | Select -Property "DisplayName" | %{$_.DisplayName}
-			$AddressList = get-recipient -Identity $Mail.PrimarySmtpAddress -Resultsize unlimited | select emailaddresses | %{$_.EmailAddresses | ?{($_.split(":")[0] -eq "smtp")}|%{$_.split(":")[1]}}
-			$Members = Get-DistributionGroupMember -Identity $Group | Where-object {$_.RecipientType -eq "UserMailbox"} | %{Get-AzureADUser -SearchString $_.Name} | Where-object {$_.UserType -eq "Member"}
+			$UniqueName = Get-DistributionGroup -Identity $Group | Where-object {$_.DisplayName -eq $Group} | Select-Object -Property "Name" | %{$_.Name}
+			$AddressList = get-recipient -Identity $Mail.PrimarySmtpAddress -Resultsize unlimited | Select-Object emailaddresses | %{$_.EmailAddresses | ?{($_.split(":")[0] -eq "smtp")}|%{$_.split(":")[1]}}
+			$Members = Get-DistributionGroupMember -Identity $UniqueName | Where-object {$_.RecipientType -eq "UserMailbox"} | %{Get-AzureADUser -SearchString $_.Name} | Where-object {$_.UserType -eq "Member"}
 			$DelegateUsers = $Members | Select-Object -Property "UserPrincipalName"
-			$DelegateGroups = Get-DistributionGroupMember -Identity $Group |where-object {$_.RecipientType -eq "MailUniversalSecurityGroup"} | %{Get-DistributionGroup -Identity $_.Name} | Select-Object -Property "PrimarySmtpAddress"
+			$DelegateGroups = Get-DistributionGroupMember -Identity $UniqueName |where-object {$_.RecipientType -eq "MailUniversalSecurityGroup"} | %{Get-DistributionGroup -Identity $_.Name} | Select-Object -Property "PrimarySmtpAddress"
 			$DelegateMembers = New-Object System.Collections.Generic.List[System.Object]
 			$DelegateUsers | %{$DelegateMembers.Add($_.UserPrincipalName)}
 			$DelegateGroups | %{$DelegateMembers.Add($_.PrimarySmtpAddress)}
-			$ExternalMembers = Get-DistributionGroupMember -Identity $Group | Where-object {$_.RecipientType -eq "MailUser" -or $_.RecipientType -eq "MailContact"}
-			$DistributionGroups = Get-DistributionGroupMember -Identity $Group |where-object {$_.RecipientType -eq "MailUniversalDistributionGroup"} | Select-Object -Property "Name"
+			$ExternalMembers = Get-DistributionGroupMember -Identity $UniqueName | Where-object {$_.RecipientType -eq "MailUser" -or $_.RecipientType -eq "MailContact"}
+			$DistributionGroups = Get-DistributionGroupMember -Identity $UniqueName |where-object {$_.RecipientType -eq "MailUniversalDistributionGroup"} | Select-Object -Property "Name"
 			$Members = $Members | Select-object -Property UserPrincipalName
 			$Membership = GetGroupMembership $Group
-			DeleteDistributionGroup $Group
+			DeleteDistributionGroup $UniqueName
 			CreateSharedMailbox $Group $Mail
 			if($delegate){GrantSendOnBehalf $Group $DelegateMembers}
 			if($DelegateMembers){AddSharedMailboxMembers $Group $Members}
@@ -77,13 +79,18 @@ function ConvertGroupToSharedMailbox ($Groups, [bool]$Delegate=$true, [bool]$Aut
 }
 
 function StartSession {
-	Write-Host "Getting credentials for the session."
-	$Credential = get-credential
-	Write-Host "Starting session..."
-	$OfficeSession = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "https://outlook.office365.com/powershell-liveid" -Credential $Credential -Authentication "Basic" -AllowRedirection
-	Write-Host "Importing session..."
-	Import-PSSession $OfficeSession -AllowClobber
-	return $OfficeSession
+	Try{
+		Write-Host "Getting credentials for the session."
+		$Credential = get-credential
+		Write-Host "Starting session..."
+		$OfficeSession = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri "https://outlook.office365.com/powershell-liveid" -Credential $Credential -Authentication "Basic" -AllowRedirection
+		Write-Host "Importing session..."
+		Import-PSSession $OfficeSession -AllowClobber
+		return $OfficeSession
+	}Catch{
+		Write-Host "Unable to start session"
+		break
+	}
 }
 
 function EndSession ($OfficeSession){
@@ -108,37 +115,44 @@ function AddToGroups ($MailAddress, $Membership){
 
 function CreateSharedMailbox ($Name, $Mail){
 	$Address = $Mail.PrimarySmtpAddress
+	$NewName = RemoveDiacritics $Name
 	Write-host "Creating a shared mailbox $Address"
-	New-Mailbox -Shared -Name $Name -DisplayName $Name -PrimarySmtpAddress $Address | Out-null
+	New-Mailbox -Shared -Name $NewName -DisplayName $Name -PrimarySmtpAddress $Address | Out-null
 }
 
 function AddSharedMailboxAlias ($Mail){
-	Write-Host "Adding alias addresses to the shared mailbox:"
 	$Timer = Get-Date
 	$result=$false
 	$Address = $Mail.PrimarySmtpAddress
-	Write-Host "    Waiting for the mailbox to synchronize over to Azure AD. This might take up to a minute."
-	do{
-		$MailUser = get-azureaduser -SearchString $Address | Where-Object {$_.UserPrincipalName -eq $Address}
-		if($MailUser){
-			Write-Host "    The user has been synchronized, attempting to add alias addresses."
-			$Done = $false
-			While(-not $Done){
-				Try{
-					Start-Sleep -s 1
-					$AddressList | %{if($_ -ne $Address){Set-Mailbox $Address -EmailAddresses @{Add=$_} -ErrorAction Stop}}
-					Write-Host "Alternative email addresses added succesfully"
-					$Done = $true
-				}Catch{
-					# Ignore error
+	Write-Host $AddressList
+	Write-host $AddressList.length
+	if($AddressList.length -ge 1 -and $AddressList.GetType().Name -ne "String"){
+		Write-Host "Adding additional addresses to the shared mailbox:"
+		Write-Host "    Waiting for the mailbox to synchronize over to Azure AD. This might take up to a minute."
+		do{
+			$MailUser = get-azureaduser -SearchString $Address | Where-Object {$_.UserPrincipalName -eq $Address}
+			if($MailUser){
+				Write-Host "    The user has been synchronized, attempting to add alias addresses."
+				$Done = $false
+				While(-not $Done){
+					Try{
+						Start-Sleep -s 1
+						$AddressList | %{if($_ -ne $Address){Set-Mailbox $Address -EmailAddresses @{Add=$_} -ErrorAction Stop}}
+						Write-Host "Alternative email addresses added succesfully"
+						$Done = $true
+					}Catch{
+						# Ignore error
+					}
 				}
+				$result=$true
+			break
 			}
-			$result=$true
-		break
+		}while ($Timer.AddSeconds(60) -gt (get-date))
+		if(-not $result){
+			Write-Host "Timeout. Unable to add alias addresses from list: $AddressList"
 		}
-	}while ($Timer.AddSeconds(60) -gt (get-date))
-	if(-not $result){
-		Write-Host "Timeout. Unable to add alias addresses from list: $AddressList"
+	}else{
+		Write-Host "No additional addresses to add."
 	}
 }
 
