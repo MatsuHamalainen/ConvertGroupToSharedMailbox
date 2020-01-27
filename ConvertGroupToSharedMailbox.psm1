@@ -25,8 +25,7 @@ function ConvertGroupToSharedMailbox ($Groups, [bool]$Delegate=$true, [bool]$Aut
 	if (Get-Module -ListAvailable -Name 'AzureAD') {
 		Connect-AzureAD
 		$OfficeSession = StartSession
-		Write-Host "Imported"
-<#		foreach ($Group in $Groups){
+		foreach ($Group in $Groups){
 			Write-Host "Starting conversion for group $Group" 
 			Try 
 			{
@@ -59,7 +58,7 @@ function ConvertGroupToSharedMailbox ($Groups, [bool]$Delegate=$true, [bool]$Aut
 			if($DistributionGroups){PrintDistributionGroups $DistributionGroups}
 			if($AddressList.length -ge 1){AddSharedMailboxAlias $Mail}
 		}
-#>		EndSession $OfficeSession
+		EndSession $OfficeSession
 		Write-Host "Group to shared mailbox conversion complete."
 	}
 	else {
