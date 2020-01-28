@@ -16,7 +16,7 @@ import-module "C:\example\git\GrouptToSharedMB\ConvertGroupToSharedMailbox.psm1"
 PARAMETERS:
 
 	.PARAMETER Groups
-	The names of the groups to be converted in quotes separated by commas
+	The names of the groups to be converted in quotes separated by commas. You should use the groups Display Name with this argument
 	.PARAMETER Delegate
 	Should the users be delegated the right to send on behalf of the created shared mailbox
 	.PARAMETER AutoMap
