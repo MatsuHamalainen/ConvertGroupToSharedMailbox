@@ -4,12 +4,14 @@ Contains the tools to convert an Office 365 mail enabled security- or distributi
 DEPENDENCIES:
 
 Powershell has to be at least version 5.0
+
 If Module AzureAD is not installed the script will attempt to use "Install-Module" utility in order to install it
 
-HOWTO IMPORT:
+IMPORTING:
 
 Copy both psm1 scripts in to the same folder and run command:
-    import-module "C:\example\git\GrouptToSharedMB\ConvertGroupToSharedMailbox.psm1"
+
+import-module "C:\example\git\GrouptToSharedMB\ConvertGroupToSharedMailbox.psm1"
     
 PARAMETERS:
 
@@ -25,6 +27,8 @@ PARAMETERS:
 USAGE:
 
 Use the module by calling it in the same powershell window that was used to import the module:
+
 ConvertGroupToSharedMailbox -Groups "Example1","Example2" -Delegate:$true -AutoMap:$false -Confirm:$false
+
 
 The script will prompt for credential, first for Connect-AzureAD and then for the PSSession. Please provice credentials with correct privileges to the could environment.
