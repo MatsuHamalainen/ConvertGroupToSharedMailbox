@@ -1,6 +1,5 @@
 ﻿#requires -version 5.0
 #requires -module AzureAD
-#requires -module RemoveDiacritics
 
 <#
 	.SYNOPSIS
@@ -41,7 +40,10 @@ function ConvertGroupToSharedMailbox ($Groups, [bool]$Delegate=$true, [bool]$Aut
 			$UniqueName = Get-DistributionGroup -Identity $Group | Where-object {$_.DisplayName -eq $Group} | Select-Object -Property "Name" | %{$_.Name}
 			$AddressList = get-recipient -Identity $Mail.PrimarySmtpAddress -Resultsize unlimited | Select-Object emailaddresses | %{$_.EmailAddresses | ?{($_.split(":")[0] -eq "smtp")}|%{$_.split(":")[1]}}
 			$Members = Get-DistributionGroupMember -Identity $UniqueName | Where-object {$_.RecipientType -eq "UserMailbox"} | %{Get-AzureADUser -SearchString $_.Name} | Where-object {$_.UserType -eq "Member"}
-			$DelegateUsers = $Members | Select-Object -Property "UserPrincipalName"
+			Write-Host "Based on search made using Display Names the group has the following members:"$Members.UserPrincipalName
+			$DelegateMailboxes = Get-DistributionGroupMember -Identity $UniqueName | Where-object {$_.RecipientType -eq "UserMailbox"} | %{Get-Mailbox -Identity $_.Name -ErrorAction SilentlyContinue} | %{Get-AzureADUser -ObjectId $_.ExternalDirectoryObjectId} |  Where-object {$_.UserType -eq "Member"}
+			Write-Host "The following members have a mailbox and are scheduled to be added to the shared mailbox:"$DelegateMailboxes.UserPrincipalName
+			$DelegateUsers = $DelegateMailboxes | Select-Object -Property "UserPrincipalName"
 			$DelegateGroups = Get-DistributionGroupMember -Identity $UniqueName |where-object {$_.RecipientType -eq "MailUniversalSecurityGroup"} | %{Get-DistributionGroup -Identity $_.Name} | Select-Object -Property "PrimarySmtpAddress"
 			$DelegateMembers = New-Object System.Collections.Generic.List[System.Object]
 			$DelegateUsers | %{$DelegateMembers.Add($_.UserPrincipalName)}
@@ -105,6 +107,7 @@ function GetGroupMembership ($Name){
 	$ID = Get-AzureADGroup -SearchString $Name | where-object{$_.DisplayName -eq $Name} | Select-object -Property 'ObjectId'
 	$Identity=foreach($Group in $GroupList){$validator = Get-AzureADGroupMember -ObjectId $Group.ObjectId | Where {$_.ObjectId -eq $ID.ObjectId} | Select-Object -Property 'DisplayName'; if($validator){Get-DistributionGroup -Identity $group.DisplayName}}
 	$Result = $Identity | %{Get-DistributionGroup -Identity $_.DisplayName} | Select-Object -Property 'PrimarySmtpAddress'
+	if($Result){Write-Host "The group is a member in following groups:"$Result.PrimarySmtpAddress}
 	return $Result
 }
 
@@ -124,8 +127,6 @@ function AddSharedMailboxAlias ($Mail){
 	$Timer = Get-Date
 	$result=$false
 	$Address = $Mail.PrimarySmtpAddress
-	Write-Host $AddressList
-	Write-host $AddressList.length
 	if($AddressList.length -ge 1 -and $AddressList.GetType().Name -ne "String"){
 		Write-Host "Adding additional addresses to the shared mailbox:"
 		Write-Host "    Waiting for the mailbox to synchronize over to Azure AD. This might take up to a minute."
