@@ -128,7 +128,8 @@ function AddSharedMailboxAlias ($Mail){
 	$result=$false
 	$Address = $Mail.PrimarySmtpAddress
 	if($AddressList.length -ge 1 -and $AddressList.GetType().Name -ne "String"){
-		Write-Host "Adding additional addresses to the shared mailbox:"
+		Write-Host "Adding additional addresses to the shared mailbox."
+		Write-Host "The following additional emails will be added:"$AddressList
 		Write-Host "    Waiting for the mailbox to synchronize over to Azure AD. This might take up to a minute."
 		do{
 			$MailUser = get-azureaduser -SearchString $Address | Where-Object {$_.UserPrincipalName -eq $Address}
