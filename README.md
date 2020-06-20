@@ -31,7 +31,7 @@ Use the module by calling it in the same powershell window that was used to impo
 ConvertGroupToSharedMailbox -Groups "Example1","Example2" -Delegate:$true -AutoMap:$false -Confirm:$false
 
 
-The script will prompt for credential, first for Connect-AzureAD and then for the PSSession. Please provice credentials with correct privileges to the could environment.
+The script will prompt for credential, first for Connect-AzureAD and then for the PSSession. Please provide credentials with correct privileges to the could environment.
 
 FUNCTIONALITY:
 
